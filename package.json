@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Joey Wohleb <joeywohleb@gmail.com>",
   "license": "ISC",
   "description": "",
   "devDependencies": {
@@ -16,5 +16,7 @@
   },
   "dependencies": {
     "express": "4.21.2"
-  }
+  },
+  "repository": "git@github.com:joeywohleb/a-motivational-quote-api.git",
+  "private": true
 }
