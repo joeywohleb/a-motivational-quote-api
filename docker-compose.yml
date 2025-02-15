@@ -1,0 +1,37 @@
+name: a-motivational-quote
+
+services:
+    a-motivational-quote-db:
+        image: mysql
+        restart: always
+        container_name: a-motivational-quote-db
+        hostname: a-motivational-quote-db
+        volumes:
+            - ./db:/var/lib/mysql
+        ports:
+            - '3306:3306'
+        environment:
+          MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+
+    web:
+        image: node
+        container_name: a-motivational-quote-api
+        working_dir: /home/node/app
+        ports:
+            - '3000:3000'
+        expose:
+            - 3000
+        environment:
+            VIRTUAL_HOST: ${VIRTUAL_HOST}
+            LETSENCRYPT_HOST: ${LETSENCRYPT_HOST}
+            LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
+            NODE_ENV: development
+        volumes:
+            - ./:/home/node/app
+        restart: always
+        command: 'npm start'
+        links:
+            - a-motivational-quote-db
+        depends_on:
+            - a-motivational-quote-db
+
