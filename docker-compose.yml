@@ -18,9 +18,9 @@ services:
         container_name: a-motivational-quote-api
         working_dir: /home/node/app
         ports:
-            - '3000:3000'
+            - '4000:4000'
         expose:
-            - 3000
+            - 4000
         environment:
             VIRTUAL_HOST: ${VIRTUAL_HOST}
             LETSENCRYPT_HOST: ${LETSENCRYPT_HOST}

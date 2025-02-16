@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "build": "tsc",
+    "start": "npm run build && node ./dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -12,11 +13,15 @@
   "description": "",
   "devDependencies": {
     "@types/express": "5.0.0",
+    "@types/node": "22.13.4",
+    "graphql": "16.10.0",
     "typescript": "5.7.3"
   },
   "dependencies": {
-    "express": "4.21.2"
+    "@apollo/server": "4.11.3",
+    "apollo-server": "3.13.0"
   },
   "repository": "git@github.com:joeywohleb/a-motivational-quote-api.git",
-  "private": true
+  "private": true,
+  "type": "module"
 }
