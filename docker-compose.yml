@@ -29,7 +29,7 @@ services:
         volumes:
             - ./:/home/node/app
         restart: always
-        command: 'npm start'
+        command: 'npm run start:dev'
         links:
             - a-motivational-quote-db
         depends_on:

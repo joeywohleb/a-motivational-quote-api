@@ -131,3 +131,6 @@ dist
 
 # database files
 db/
+
+#Mac files
+.DS_Store

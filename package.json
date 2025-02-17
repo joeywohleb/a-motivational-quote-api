@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
+    "start:dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "start": "npm run build && node ./dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -15,13 +16,15 @@
     "@types/express": "5.0.0",
     "@types/node": "22.13.4",
     "graphql": "16.10.0",
+    "ts-node": "10.9.2",
+    "ts-node-dev": "2.0.0",
     "typescript": "5.7.3"
   },
   "dependencies": {
     "@apollo/server": "4.11.3",
-    "apollo-server": "3.13.0"
+    "apollo-server": "3.13.0",
+    "csv-parse": "5.6.0"
   },
   "repository": "git@github.com:joeywohleb/a-motivational-quote-api.git",
-  "private": true,
-  "type": "module"
+  "private": true
 }
