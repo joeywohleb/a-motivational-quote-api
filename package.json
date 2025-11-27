@@ -4,22 +4,39 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
+    "start:dev": "nodemon --env-file=.env --exec node --experimental-specifier-resolution=node --loader ts-node/esm src/index.ts",
     "start": "npm run build && node ./dist/index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "seed": "node --env-file=.env --experimental-specifier-resolution=node --loader ts-node/esm src/seed.ts",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage"
   },
   "keywords": [],
   "author": "Joey Wohleb <joeywohleb@gmail.com>",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@babel/core": "7.26.9",
+    "@babel/node": "7.26.0",
+    "@babel/preset-env": "7.26.9",
     "@types/express": "5.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "22.13.4",
     "graphql": "16.10.0",
+    "jest": "^30.2.0",
+    "nodemon": "3.1.9",
+    "ts-jest": "^29.4.5",
+    "ts-node": "10.9.2",
+    "ts-node-dev": "2.0.0",
+    "type-graphql": "2.0.0-rc.2",
     "typescript": "5.7.3"
   },
   "dependencies": {
     "@apollo/server": "4.11.3",
-    "apollo-server": "3.13.0"
+    "apollo-server": "3.13.0",
+    "csv-parse": "5.6.0",
+    "mysql2": "3.12.0",
+    "typeorm": "0.3.20"
   },
   "repository": "git@github.com:joeywohleb/a-motivational-quote-api.git",
   "private": true,

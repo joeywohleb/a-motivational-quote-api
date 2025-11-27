@@ -11,7 +11,12 @@ services:
         ports:
             - '3306:3306'
         environment:
-          MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+          MYSQL_DATABASE: ${DB_NAME}
+          MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+        networks:
+            a-motivational-quote:
+                aliases:
+                - mysql
 
     web:
         image: node
@@ -22,16 +27,26 @@ services:
         expose:
             - 4000
         environment:
-            VIRTUAL_HOST: ${VIRTUAL_HOST}
-            LETSENCRYPT_HOST: ${LETSENCRYPT_HOST}
-            LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL}
             NODE_ENV: development
+            DB_HOST: a-motivational-quote-db
+            DB_PORT: 3306
+            DB_USER: root
+            DB_PASSWORD: ${DB_PASSWORD}
+            DB_NAME: ${DB_NAME}
+            SEED_LIMIT: 500
         volumes:
             - ./:/home/node/app
         restart: always
-        command: 'npm start'
+        entrypoint: ["/bin/bash", "/home/node/app/docker-entrypoint.sh"]
         links:
             - a-motivational-quote-db
         depends_on:
             - a-motivational-quote-db
+        networks:
+            a-motivational-quote:
+                aliases:
+                - web
 
+networks:
+  a-motivational-quote:
+    driver: bridge
