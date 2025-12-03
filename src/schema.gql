@@ -10,8 +10,11 @@ type Author {
 }
 
 type Query {
+  nextQuote(id: Int!): Quote
+  prevQuote(id: Int!): Quote
   quote(permalink: String!): Quote
   quoteById(quoteId: Int!): Quote
+  quoteByPermalink(author: String!, permalink: String!): Quote
   quotes: [Quote!]!
   randomQuote: Quote
 }
