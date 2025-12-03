@@ -44,6 +44,88 @@ export class QuoteResolver {
     return result;
   }
 
+  @Query(_returns => Quote, { nullable: true })
+  async quoteByPermalink(
+    @Arg("author") author: string,
+    @Arg("permalink") permalink: string
+  ): Promise<Quote | null> {
+    // Find the author by permalink
+    const authorEntity = await this.authorRepository.findOne({
+      where: { permalink: author }
+    });
+
+    if (!authorEntity) {
+      return null;
+    }
+
+    // Find the quote by permalink and author ID using query builder
+    const quote = await this.quoteRepository
+      .createQueryBuilder('quote')
+      .where('quote.permalink = :permalink', { permalink })
+      .andWhere('quote.authorId = :authorId', { authorId: authorEntity.id })
+      .getOne();
+
+    return quote;
+  }
+
+  @Query(_returns => Quote, { nullable: true })
+  async nextQuote(@Arg("id", _type => Int) id: number): Promise<Quote | null> {
+    // First check if the quote with the given ID exists
+    const currentQuote = await this.quoteRepository.findOneBy({ id });
+
+    if (!currentQuote) {
+      throw new Error(`Quote with ID ${id} not found`);
+    }
+
+    // Try to find the next quote (with ID greater than current)
+    const nextQuote = await this.quoteRepository
+      .createQueryBuilder('quote')
+      .where('quote.id > :id', { id })
+      .orderBy('quote.id', 'ASC')
+      .limit(1)
+      .getOne();
+
+    // If no next quote found, wrap around to the first quote
+    if (!nextQuote) {
+      return await this.quoteRepository
+        .createQueryBuilder('quote')
+        .orderBy('quote.id', 'ASC')
+        .limit(1)
+        .getOne();
+    }
+
+    return nextQuote;
+  }
+
+  @Query(_returns => Quote, { nullable: true })
+  async prevQuote(@Arg("id", _type => Int) id: number): Promise<Quote | null> {
+    // First check if the quote with the given ID exists
+    const currentQuote = await this.quoteRepository.findOneBy({ id });
+
+    if (!currentQuote) {
+      throw new Error(`Quote with ID ${id} not found`);
+    }
+
+    // Try to find the previous quote (with ID less than current)
+    const prevQuote = await this.quoteRepository
+      .createQueryBuilder('quote')
+      .where('quote.id < :id', { id })
+      .orderBy('quote.id', 'DESC')
+      .limit(1)
+      .getOne();
+
+    // If no previous quote found, wrap around to the last quote
+    if (!prevQuote) {
+      return await this.quoteRepository
+        .createQueryBuilder('quote')
+        .orderBy('quote.id', 'DESC')
+        .limit(1)
+        .getOne();
+    }
+
+    return prevQuote;
+  }
+
   @FieldResolver()
   async author(@Root() quote: Quote): Promise<Author> {
     return (await this.authorRepository.findOne({ where: { id: quote.authorId }, cache: 1000 }))!;
