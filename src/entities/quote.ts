@@ -26,6 +26,7 @@ export class Quote {
   @RelationId((quote: Quote) => quote.author)
   authorId?: number;
 
+  @Field(_type => [Category])
   @ManyToMany(() => Category)
   @JoinTable()
   categories: Category[]

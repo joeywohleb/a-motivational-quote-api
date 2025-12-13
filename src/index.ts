@@ -5,6 +5,7 @@ import { parse } from 'csv-parse';
 import { buildSchema } from 'type-graphql';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { getComplexity, simpleEstimator, fieldExtensionsEstimator } from 'graphql-query-complexity';
 
 import { QuoteResolver } from './resolvers';
 import { permalinkGenerator } from './utils/permalinkGenerator.util';
@@ -132,8 +133,38 @@ async function startServer() {
     // Seed database (only if needed - you might want to add a check here)
     // await seedDatabase();
 
-    // Create an Apollo Server instance
-    const server = new ApolloServer({ schema });
+    // Create an Apollo Server instance with complexity limiting
+    const server = new ApolloServer({
+      schema,
+      plugins: [
+        {
+          async requestDidStart() {
+            return {
+              async didResolveOperation({ request, document }) {
+                const complexity = getComplexity({
+                  schema,
+                  query: document,
+                  variables: request.variables,
+                  estimators: [
+                    fieldExtensionsEstimator(),
+                    simpleEstimator({ defaultComplexity: 1 })
+                  ]
+                });
+
+                const maxComplexity = 1000;
+                if (complexity > maxComplexity) {
+                  throw new Error(
+                    `Query is too complex: ${complexity}. Maximum allowed complexity: ${maxComplexity}`
+                  );
+                }
+
+                console.log(`Query complexity: ${complexity}`);
+              }
+            };
+          }
+        }
+      ]
+    });
 
     // Start the server
     const port = 4000;

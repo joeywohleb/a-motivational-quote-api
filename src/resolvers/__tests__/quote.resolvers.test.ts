@@ -20,6 +20,7 @@ describe('QuoteResolver', () => {
     // Create mock repositories
     mockQuoteRepository = {
       findOneBy: jest.fn(),
+      findOne: jest.fn(),
       find: jest.fn(),
       createQueryBuilder: jest.fn(),
     } as any;
@@ -45,7 +46,7 @@ describe('QuoteResolver', () => {
   });
 
   describe('quoteById', () => {
-    it('should return a quote by id', async () => {
+    it('should return a quote by id with relations', async () => {
       const mockQuote = {
         id: 1,
         quote: 'Test quote',
@@ -53,26 +54,32 @@ describe('QuoteResolver', () => {
         authorId: 1,
       } as Quote;
 
-      mockQuoteRepository.findOneBy.mockResolvedValue(mockQuote);
+      mockQuoteRepository.findOne.mockResolvedValue(mockQuote);
 
       const result = await quoteResolver.quoteById(1);
 
       expect(result).toEqual(mockQuote);
-      expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ id: 1 });
+      expect(mockQuoteRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 1 },
+        relations: ['author', 'categories']
+      });
     });
 
     it('should return null if quote not found', async () => {
-      mockQuoteRepository.findOneBy.mockResolvedValue(null);
+      mockQuoteRepository.findOne.mockResolvedValue(null);
 
       const result = await quoteResolver.quoteById(999);
 
       expect(result).toBeNull();
-      expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ id: 999 });
+      expect(mockQuoteRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 999 },
+        relations: ['author', 'categories']
+      });
     });
   });
 
   describe('quote', () => {
-    it('should return a quote by permalink', async () => {
+    it('should return a quote by permalink with relations', async () => {
       const mockQuote = {
         id: 1,
         quote: 'Test quote',
@@ -80,51 +87,339 @@ describe('QuoteResolver', () => {
         authorId: 1,
       } as Quote;
 
-      mockQuoteRepository.findOneBy.mockResolvedValue(mockQuote);
+      mockQuoteRepository.findOne.mockResolvedValue(mockQuote);
 
       const result = await quoteResolver.quote('test-quote');
 
       expect(result).toEqual(mockQuote);
-      expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ permalink: 'test-quote' });
+      expect(mockQuoteRepository.findOne).toHaveBeenCalledWith({
+        where: { permalink: 'test-quote' },
+        relations: ['author', 'categories']
+      });
     });
 
     it('should return null if quote with permalink not found', async () => {
-      mockQuoteRepository.findOneBy.mockResolvedValue(null);
+      mockQuoteRepository.findOne.mockResolvedValue(null);
 
       const result = await quoteResolver.quote('non-existent');
 
       expect(result).toBeNull();
-      expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ permalink: 'non-existent' });
+      expect(mockQuoteRepository.findOne).toHaveBeenCalledWith({
+        where: { permalink: 'non-existent' },
+        relations: ['author', 'categories']
+      });
     });
   });
 
-  describe('quotes', () => {
-    it('should return all quotes', async () => {
-      const mockQuotes = [
-        { id: 1, quote: 'Quote 1', permalink: 'quote-1', authorId: 1 },
-        { id: 2, quote: 'Quote 2', permalink: 'quote-2', authorId: 2 },
-      ] as Quote[];
+  describe('quotes (paginated)', () => {
+    let mockQueryBuilder: any;
 
-      mockQuoteRepository.find.mockResolvedValue(mockQuotes);
+    beforeEach(() => {
+      mockQueryBuilder = {
+        leftJoin: jest.fn().mockReturnThis(),
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        getCount: jest.fn(),
+        skip: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        getMany: jest.fn(),
+      };
 
-      const result = await quoteResolver.quotes();
-
-      expect(result).toEqual(mockQuotes);
-      expect(mockQuoteRepository.find).toHaveBeenCalled();
+      mockQuoteRepository.createQueryBuilder.mockReturnValue(mockQueryBuilder);
     });
 
-    it('should return empty array if no quotes exist', async () => {
-      mockQuoteRepository.find.mockResolvedValue([]);
+    describe('limit validation', () => {
+      it('should throw error when limit exceeds 20', async () => {
+        await expect(
+          quoteResolver.quotes(1, 21)
+        ).rejects.toThrow('Limit cannot exceed 20');
+      });
 
-      const result = await quoteResolver.quotes();
+      it('should accept limit of 20', async () => {
+        const mockQuotes = new Array(20).fill(null).map((_, i) => ({
+          id: i + 1,
+          quote: `Quote ${i + 1}`,
+          permalink: `quote-${i + 1}`,
+          authorId: 1
+        }));
 
-      expect(result).toEqual([]);
-      expect(mockQuoteRepository.find).toHaveBeenCalled();
+        mockQueryBuilder.getCount.mockResolvedValue(100);
+        mockQueryBuilder.getMany.mockResolvedValue(mockQuotes);
+
+        const result = await quoteResolver.quotes(1, 20);
+
+        expect(result.limit).toBe(20);
+        expect(result.items.length).toBe(20);
+        expect(mockQueryBuilder.take).toHaveBeenCalledWith(20);
+      });
+
+      it('should use default limit of 10', async () => {
+        const mockQuotes = new Array(10).fill(null).map((_, i) => ({
+          id: i + 1,
+          quote: `Quote ${i + 1}`,
+          permalink: `quote-${i + 1}`,
+          authorId: 1
+        }));
+
+        mockQueryBuilder.getCount.mockResolvedValue(50);
+        mockQueryBuilder.getMany.mockResolvedValue(mockQuotes);
+
+        const result = await quoteResolver.quotes();
+
+        expect(result.limit).toBe(10);
+        expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
+      });
+    });
+
+    describe('pagination', () => {
+      it('should return correct page of results', async () => {
+        const mockQuotes = new Array(10).fill(null).map((_, i) => ({
+          id: i + 11,
+          quote: `Quote ${i + 11}`,
+          permalink: `quote-${i + 11}`,
+          authorId: 1
+        }));
+
+        mockQueryBuilder.getCount.mockResolvedValue(50);
+        mockQueryBuilder.getMany.mockResolvedValue(mockQuotes);
+
+        const result = await quoteResolver.quotes(2, 10);
+
+        expect(result.page).toBe(2);
+        expect(result.total).toBe(50);
+        expect(mockQueryBuilder.skip).toHaveBeenCalledWith(10);
+        expect(mockQueryBuilder.take).toHaveBeenCalledWith(10);
+      });
+
+      it('should calculate hasMore correctly when more pages exist', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(50);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        const result = await quoteResolver.quotes(1, 10);
+
+        expect(result.hasMore).toBe(true);
+        expect(result.totalPages).toBe(5);
+      });
+
+      it('should calculate hasMore correctly when on last page', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(50);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        const result = await quoteResolver.quotes(5, 10);
+
+        expect(result.hasMore).toBe(false);
+        expect(result.totalPages).toBe(5);
+      });
+
+      it('should handle page beyond available data', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(25);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        const result = await quoteResolver.quotes(10, 10);
+
+        expect(result.items).toEqual([]);
+        expect(result.hasMore).toBe(false);
+        expect(result.totalPages).toBe(3);
+      });
+    });
+
+    describe('wildcard filters', () => {
+      it('should filter by author with partial match', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(5);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, 'Einstein');
+
+        expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.author', 'author');
+        expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('quote.author', 'author_filter');
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('author_filter.name LIKE :author', { author: '%Einstein%' });
+      });
+
+      it('should filter by category with partial match', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(5);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, 'love');
+
+        expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.categories', 'categories');
+        expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('quote.categories', 'category_filter');
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('category_filter.name LIKE :category', { category: '%love%' });
+      });
+
+      it('should combine author and category filters with AND logic', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(2);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, 'Shakespeare', 'love');
+
+        expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('quote.author', 'author_filter');
+        expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('quote.categories', 'category_filter');
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('author_filter.name LIKE :author', { author: '%Shakespeare%' });
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('category_filter.name LIKE :category', { category: '%love%' });
+      });
+
+      it('should use LIKE for case-insensitive partial matching', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(5);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, 'einstein');
+
+        expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('author_filter.name LIKE :author', { author: '%einstein%' });
+      });
+    });
+
+    describe('sorting', () => {
+      it('should sort by ID ascending by default', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes();
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.id', 'ASC');
+      });
+
+      it('should sort by ID descending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.ID, SortDirection.DESC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.id', 'DESC');
+      });
+
+      it('should sort by quote text ascending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.QUOTE, SortDirection.ASC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.quote', 'ASC');
+      });
+
+      it('should sort by quote text descending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.QUOTE, SortDirection.DESC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.quote', 'DESC');
+      });
+
+      it('should sort by author ascending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.AUTHOR, SortDirection.ASC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('author.name', 'ASC');
+      });
+
+      it('should sort by author descending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.AUTHOR, SortDirection.DESC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('author.name', 'DESC');
+      });
+
+      it('should sort by permalink ascending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.PERMALINK, SortDirection.ASC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.permalink', 'ASC');
+      });
+
+      it('should sort by permalink descending', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(10);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, undefined, undefined, QuoteSortField.PERMALINK, SortDirection.DESC);
+
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.permalink', 'DESC');
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle empty results', async () => {
+        mockQueryBuilder.getCount.mockResolvedValue(0);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        const result = await quoteResolver.quotes();
+
+        expect(result.items).toEqual([]);
+        expect(result.total).toBe(0);
+        expect(result.hasMore).toBe(false);
+        expect(result.totalPages).toBe(0);
+      });
+
+      it('should handle single result', async () => {
+        const mockQuote = {
+          id: 1,
+          quote: 'Single quote',
+          permalink: 'single-quote',
+          authorId: 1
+        } as Quote;
+
+        mockQueryBuilder.getCount.mockResolvedValue(1);
+        mockQueryBuilder.getMany.mockResolvedValue([mockQuote]);
+
+        const result = await quoteResolver.quotes();
+
+        expect(result.items).toEqual([mockQuote]);
+        expect(result.total).toBe(1);
+        expect(result.hasMore).toBe(false);
+        expect(result.totalPages).toBe(1);
+      });
+
+      it('should handle exact limit boundary', async () => {
+        const mockQuotes = new Array(10).fill(null).map((_, i) => ({
+          id: i + 11,
+          quote: `Quote ${i + 11}`,
+          permalink: `quote-${i + 11}`,
+          authorId: 1
+        }));
+
+        mockQueryBuilder.getCount.mockResolvedValue(20);
+        mockQueryBuilder.getMany.mockResolvedValue(mockQuotes);
+
+        const result = await quoteResolver.quotes(2, 10);
+
+        expect(result.page).toBe(2);
+        expect(result.hasMore).toBe(false);
+        expect(result.totalPages).toBe(2);
+      });
+
+      it('should use different aliases for eager-load and filter joins', async () => {
+        const { QuoteSortField, SortDirection } = require('../../types');
+        mockQueryBuilder.getCount.mockResolvedValue(5);
+        mockQueryBuilder.getMany.mockResolvedValue([]);
+
+        await quoteResolver.quotes(1, 10, 'Einstein', undefined, QuoteSortField.AUTHOR, SortDirection.ASC);
+
+        // Check that eager-load uses 'author'
+        expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.author', 'author');
+        // Check that filter join uses 'author_filter'
+        expect(mockQueryBuilder.leftJoin).toHaveBeenCalledWith('quote.author', 'author_filter');
+        // Check that sorting uses the eager-loaded 'author' alias
+        expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('author.name', 'ASC');
+      });
     });
   });
 
   describe('randomQuote', () => {
-    it('should return a random quote', async () => {
+    it('should return a random quote with relations', async () => {
       const mockQuote = {
         id: 5,
         quote: 'Random quote',
@@ -133,6 +428,7 @@ describe('QuoteResolver', () => {
       } as Quote;
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockQuote),
@@ -144,6 +440,8 @@ describe('QuoteResolver', () => {
 
       expect(result).toEqual(mockQuote);
       expect(mockQuoteRepository.createQueryBuilder).toHaveBeenCalledWith('quote');
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.author', 'author');
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.categories', 'categories');
       expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('RAND()');
       expect(mockQueryBuilder.limit).toHaveBeenCalledWith(1);
       expect(mockQueryBuilder.getOne).toHaveBeenCalled();
@@ -151,6 +449,7 @@ describe('QuoteResolver', () => {
 
     it('should return null if no quotes exist', async () => {
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(null),
@@ -165,7 +464,7 @@ describe('QuoteResolver', () => {
   });
 
   describe('quoteByPermalink', () => {
-    it('should return a quote by author and permalink', async () => {
+    it('should return a quote by author and permalink with relations', async () => {
       const mockAuthor = {
         id: 1,
         name: 'Test Author',
@@ -182,6 +481,7 @@ describe('QuoteResolver', () => {
       mockAuthorRepository.findOne.mockResolvedValue(mockAuthor);
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(mockQuote),
@@ -195,6 +495,8 @@ describe('QuoteResolver', () => {
       expect(mockAuthorRepository.findOne).toHaveBeenCalledWith({
         where: { permalink: 'test-author' },
       });
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.author', 'author');
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.categories', 'categories');
       expect(mockQueryBuilder.where).toHaveBeenCalledWith('quote.permalink = :permalink', { permalink: 'test-quote' });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('quote.authorId = :authorId', { authorId: 1 });
     });
@@ -220,6 +522,7 @@ describe('QuoteResolver', () => {
       mockAuthorRepository.findOne.mockResolvedValue(mockAuthor);
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getOne: jest.fn().mockResolvedValue(null),
@@ -236,7 +539,7 @@ describe('QuoteResolver', () => {
   });
 
   describe('nextQuote', () => {
-    it('should return the next quote', async () => {
+    it('should return the next quote with relations', async () => {
       const currentQuote = {
         id: 5,
         quote: 'Current quote',
@@ -254,6 +557,7 @@ describe('QuoteResolver', () => {
       mockQuoteRepository.findOneBy.mockResolvedValue(currentQuote);
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
@@ -266,6 +570,8 @@ describe('QuoteResolver', () => {
 
       expect(result).toEqual(nextQuote);
       expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ id: 5 });
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.author', 'author');
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.categories', 'categories');
       expect(mockQueryBuilder.where).toHaveBeenCalledWith('quote.id > :id', { id: 5 });
       expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.id', 'ASC');
     });
@@ -288,6 +594,7 @@ describe('QuoteResolver', () => {
       mockQuoteRepository.findOneBy.mockResolvedValue(lastQuote);
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
@@ -313,7 +620,7 @@ describe('QuoteResolver', () => {
   });
 
   describe('prevQuote', () => {
-    it('should return the previous quote', async () => {
+    it('should return the previous quote with relations', async () => {
       const currentQuote = {
         id: 5,
         quote: 'Current quote',
@@ -331,6 +638,7 @@ describe('QuoteResolver', () => {
       mockQuoteRepository.findOneBy.mockResolvedValue(currentQuote);
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
@@ -343,6 +651,8 @@ describe('QuoteResolver', () => {
 
       expect(result).toEqual(prevQuote);
       expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ id: 5 });
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.author', 'author');
+      expect(mockQueryBuilder.leftJoinAndSelect).toHaveBeenCalledWith('quote.categories', 'categories');
       expect(mockQueryBuilder.where).toHaveBeenCalledWith('quote.id < :id', { id: 5 });
       expect(mockQueryBuilder.orderBy).toHaveBeenCalledWith('quote.id', 'DESC');
     });
@@ -365,6 +675,7 @@ describe('QuoteResolver', () => {
       mockQuoteRepository.findOneBy.mockResolvedValue(firstQuote);
 
       const mockQueryBuilder = {
+        leftJoinAndSelect: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
         orderBy: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
@@ -386,57 +697,6 @@ describe('QuoteResolver', () => {
 
       await expect(quoteResolver.prevQuote(999)).rejects.toThrow('Quote with ID 999 not found');
       expect(mockQuoteRepository.findOneBy).toHaveBeenCalledWith({ id: 999 });
-    });
-  });
-
-  describe('author (field resolver)', () => {
-    it('should return the author for a quote', async () => {
-      const mockAuthor = {
-        id: 1,
-        name: 'Test Author',
-        permalink: 'test-author',
-      } as Author;
-
-      const mockQuote = {
-        id: 1,
-        quote: 'Test quote',
-        permalink: 'test-quote',
-        authorId: 1,
-      } as Quote;
-
-      mockAuthorRepository.findOne.mockResolvedValue(mockAuthor);
-
-      const result = await quoteResolver.author(mockQuote);
-
-      expect(result).toEqual(mockAuthor);
-      expect(mockAuthorRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 1 },
-        cache: 1000,
-      });
-    });
-
-    it('should cache author lookups', async () => {
-      const mockAuthor = {
-        id: 1,
-        name: 'Test Author',
-        permalink: 'test-author',
-      } as Author;
-
-      const mockQuote = {
-        id: 1,
-        quote: 'Test quote',
-        permalink: 'test-quote',
-        authorId: 1,
-      } as Quote;
-
-      mockAuthorRepository.findOne.mockResolvedValue(mockAuthor);
-
-      await quoteResolver.author(mockQuote);
-
-      expect(mockAuthorRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 1 },
-        cache: 1000,
-      });
     });
   });
 });

@@ -9,19 +9,48 @@ type Author {
   permalink: String!
 }
 
+type Category {
+  id: ID!
+  name: String!
+}
+
 type Query {
   nextQuote(id: Int!): Quote
   prevQuote(id: Int!): Quote
   quote(permalink: String!): Quote
   quoteById(quoteId: Int!): Quote
   quoteByPermalink(author: String!, permalink: String!): Quote
-  quotes: [Quote!]!
+  quotes(author: String, category: String, limit: Int = 10, page: Int = 1, sortBy: QuoteSortField = ID, sortDirection: SortDirection = ASC): QuotePage!
   randomQuote: Quote
 }
 
 type Quote {
   author: Author!
+  categories: [Category!]!
   id: ID!
   permalink: String!
   quote: String!
+}
+
+type QuotePage {
+  hasMore: Boolean!
+  items: [Quote!]!
+  limit: Int!
+  page: Int!
+  total: Int!
+  totalPages: Int!
+}
+
+"""Fields available for sorting quotes"""
+enum QuoteSortField {
+  AUTHOR
+  ID
+  PERMALINK
+  QUOTE
+}
+
+"""Sort direction"""
+enum SortDirection {
+  ASC
+  DESC
 }
